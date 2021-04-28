@@ -1,16 +1,19 @@
 package com.pluralsight.pension.setup;
 
 import com.pluralsight.pension.AccountRepository;
+import com.pluralsight.pension.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.time.LocalDate;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import org.mockito.*;
+import sun.util.resources.LocaleData;
 
 class AccountOpeningServiceTest {
 
@@ -18,16 +21,40 @@ class AccountOpeningServiceTest {
     private BackgroundCheckService backgroundCheckService = mock(BackgroundCheckService.class);
     private ReferenceIdsManager referenceIdsManager = mock(ReferenceIdsManager.class);
     private AccountRepository accountRepository = mock(AccountRepository.class);
+    private AccountOpeningEventPublisher eventPublisher = mock(AccountOpeningEventPublisher.class);
+    private static final String FIRST_NAME = "Murilo";
+    private static final String LAST_NAME = "Eduardo";
+    private static final String TAX_ID = "222";
+    private static final LocalDate DOB = LocalDate.of(1990,1,1);
 
     @BeforeEach
     void setUp() {
-        underTest = new AccountOpeningService(backgroundCheckService,referenceIdsManager,accountRepository);
+        underTest = new AccountOpeningService(backgroundCheckService,referenceIdsManager,accountRepository, eventPublisher);
     }
 
     @Test
-    public void shouldOpenAccount() throws IOException {
-        final AccountOpeningStatus accountOpeningStatus = underTest.openAccount("John", "Smith", "123XYZ9", LocalDate.of(1990, 1, 1));
-        assertEquals(AccountOpeningStatus.OPENED, accountOpeningStatus);
+    public void shoudOpenAccount() throws IOException {
+        when(backgroundCheckService.confirm(FIRST_NAME,LAST_NAME,"123XYZ9", DOB))
+                .thenReturn(new BackgroundCheckResults("something_not_unacceptable",100));
+        when(referenceIdsManager.obtainId(eq(FIRST_NAME),anyString(),eq(LAST_NAME),eq(TAX_ID),eq(DOB)))
+                .thenReturn("some_id");
+        final AccountOpeningStatus accountOpeningStatus = underTest.openAccount(FIRST_NAME,LAST_NAME,"123XZY",DOB);
+        assertEquals(AccountOpeningStatus.DECLINED, accountOpeningStatus);
+    }
 
+    @Test
+    public void shouldDeclineAccountIfUnnaceptableRiskProfileBackgroundCheckResponseReceived() throws  IOException{
+        Mockito.when(backgroundCheckService.confirm(FIRST_NAME,LAST_NAME,"123XZY",DOB)
+        ).thenReturn(new BackgroundCheckResults("UNACEPPTABLE_RISK_PROFILE",0));
+        final AccountOpeningStatus accountOpeningStatus = underTest.openAccount(FIRST_NAME,LAST_NAME,"123XZY",DOB);
+        assertEquals(AccountOpeningStatus.DECLINED, accountOpeningStatus);
+    }
+
+    @Test
+    public void shouldDeclineAccountIfNullBackgroudCheckResponseReceived() throws IOException {
+        Mockito.when(backgroundCheckService.confirm(FIRST_NAME,LAST_NAME,"123XZY",DOB)
+        ).thenReturn(null);
+        final AccountOpeningStatus accountOpeningStatus = underTest.openAccount(FIRST_NAME,LAST_NAME,"123XZY",DOB);
+        assertEquals(AccountOpeningStatus.DECLINED, accountOpeningStatus);
     }
 }

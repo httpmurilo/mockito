@@ -5,8 +5,7 @@ import com.pluralsight.pension.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -22,6 +21,7 @@ class AccountOpeningServiceTest {
     private ReferenceIdsManager referenceIdsManager = mock(ReferenceIdsManager.class);
     private AccountRepository accountRepository = mock(AccountRepository.class);
     private AccountOpeningEventPublisher eventPublisher = mock(AccountOpeningEventPublisher.class);
+    private BackgroundCheckResults backgroundCheckResults = mock(BackgroundCheckResults.class);
     private static final String FIRST_NAME = "Murilo";
     private static final String LAST_NAME = "Eduardo";
     private static final String TAX_ID = "222";
@@ -56,5 +56,31 @@ class AccountOpeningServiceTest {
         ).thenReturn(null);
         final AccountOpeningStatus accountOpeningStatus = underTest.openAccount(FIRST_NAME,LAST_NAME,"123XZY",DOB);
         assertEquals(AccountOpeningStatus.DECLINED, accountOpeningStatus);
+    }
+
+    @Test
+    public void shouldThrowIfBackgroundCHecksServiceThrows() throws IOException{
+        when(backgroundCheckService.confirm(FIRST_NAME,LAST_NAME,TAX_ID,DOB))
+                .thenThrow(new IOException());
+        assertThrows(IOException.class, () -> underTest.openAccount(FIRST_NAME,LAST_NAME,TAX_ID,DOB));
+    }
+    @Test
+    public void shouldThrowIfReferenceIdsManagerThrows() throws IOException{
+        when(backgroundCheckService.confirm(FIRST_NAME,LAST_NAME,"123XYZ9", DOB))
+                .thenReturn(new BackgroundCheckResults("something_not_unacceptable",100));
+        when(referenceIdsManager.obtainId(eq(FIRST_NAME),anyString(),eq(LAST_NAME),eq(TAX_ID),eq(DOB)))
+                .thenReturn("some_id");
+        assertThrows(RuntimeException.class,() -> underTest.openAccount(FIRST_NAME,LAST_NAME,TAX_ID,DOB));
+    }
+
+    @Test
+    public void shouldThrowIfAccountRepositoryThrows() throws IOException {
+        when(backgroundCheckService.confirm(FIRST_NAME,LAST_NAME,"123XYZ9", DOB))
+                .thenReturn(new BackgroundCheckResults("something_not_unacceptable",100));
+        when(referenceIdsManager.obtainId(eq(FIRST_NAME),anyString(),eq(LAST_NAME),eq(TAX_ID),eq(DOB)))
+                .thenReturn("someID");
+        when(accountRepository.save("someID", FIRST_NAME,LAST_NAME,TAX_ID,DOB, backgroundCheckResults))
+        .thenThrow(new RuntimeException());
+        assertThrows(RuntimeException.class, () -> underTest.openAccount(FIRST_NAME,LAST_NAME,TAX_ID,DOB));
     }
 }
